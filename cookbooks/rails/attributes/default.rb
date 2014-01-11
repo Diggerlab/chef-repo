@@ -1,1 +1,1 @@
-default['rails']['applications_root'] = '/u/apps'
+default['rails']['applications_root'] = '/opt/www'
