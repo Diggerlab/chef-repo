@@ -9,7 +9,7 @@ if node[:active_applications]
 
       database_info = app_info['database_info']
 
-      mysql_connection_info = {:host => "localhost", :username => "root", :password => node['mysql']['server_root_password']}
+      mysql_connection_info = {:host => database_info['host'], :username => "root", :password => node['mysql']['server_root_password']}
 
       app = database_info['database']
       
@@ -23,7 +23,7 @@ if node[:active_applications]
         password database_info['password']
         database_name database_info['database']
         table "*"
-        host "localhost"
+        host '%'
         action :grant
       end
 
@@ -36,7 +36,7 @@ if node[:active_applications]
             password database_info['password']
             database_name database_info['database']
             table "*"
-            host client_address
+            host '%'
             action :grant
           end
         end
