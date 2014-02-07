@@ -1,0 +1,33 @@
+{
+  "description": "Intercity Base Image",
+  "builders": [
+    {
+      "type": "docker",
+      "image": "ubuntu:12.04",
+      "export_path": "intercity-baseimage-{{timestamp}}.tar"
+    },
+    {
+      "type": "virtualbox-ovf",
+      "source_path": "/Users/michiel/.vagrant.d/boxes/precise64/virtualbox/box.ovf",
+      "ssh_username": "vagrant",
+      "ssh_password": "vagrant",
+      "ssh_wait_timeout": "30s",
+      "shutdown_command": "echo 'vagrant' | sudo -S shutdown -P now"
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "chef-solo",
+      "cookbook_paths": ["../cookbooks"],
+      "roles_path": "../roles",
+      "run_list": ["role[rails_passenger]", "role[mysql]"],
+      "json": {
+        "mysql": {
+          "server_debian_password": "server_debian_password",
+          "server_root_password": "server_root_password",
+          "server_repl_password": "server_repl_password"
+        }
+      }
+    }
+  ]
+}

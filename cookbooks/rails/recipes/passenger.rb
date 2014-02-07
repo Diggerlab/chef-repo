@@ -1,5 +1,5 @@
 #
-# Cookbook Name:: rails
+# Cookbook Name:: rails::passenger
 # Recipe:: default
 #
 # Copyright 2012, Michiel Sikkes
@@ -17,9 +17,25 @@
 # limitations under the License.
 #
 
-include_recipe "sudo"
+package "apt-transport-https"
+
+apt_repository "passenger" do
+  uri "https://oss-binaries.phusionpassenger.com/apt/passenger"
+  distribution "precise"
+  components ["main"]
+  key "561F9B9CAC40B2F7"
+  keyserver "keyserver.ubuntu.com"
+end
+
 include_recipe "nginx"
-include_recipe "bluepill"
+
+template "/etc/nginx/conf.d/passenger.conf" do
+  source "passenger.conf.erb"
+  owner 'root'
+  group 'root'
+  mode '0600'
+  notifies :restart, "service[nginx]"
+end
 
 user "deploy" do
   comment "Deploy User"
@@ -37,28 +53,6 @@ sudo "deploy" do
   user "deploy"
   commands ["#{node[:bluepill][:bin]}"]
   nopasswd true
-end
-
-if node[:deploy_users]
-  node[:deploy_users].each do |deploy_user|
-    user deploy_user do
-      comment "Deploy User #{deploy_user}"
-      home "/home/#{deploy_user}"
-      shell "/bin/bash"
-
-      supports(:manage_home => true )
-    end
-
-    group deploy_user do
-      members [deploy_user]
-    end
-
-    sudo deploy_user do
-      user deploy_user
-      commands ["#{node[:bluepill][:bin]}"]
-      nopasswd true
-    end
-  end
 end
 
 include_recipe "rbenv::default"
@@ -127,36 +121,9 @@ if node[:active_applications]
     end
 
     template "/etc/nginx/sites-available/#{app}.conf" do
-      source "app_nginx.conf.erb"
+      source "app_passenger_nginx.conf.erb"
       variables :name => app, :domain_names => app_info['domain_names'], :enable_ssl => File.exists?("#{applications_root}/#{app}/shared/config/certificate.crt")
       notifies :reload, resources(:service => "nginx")
-    end
-
-    template "#{applications_root}/#{app}/shared/config/unicorn.rb" do
-      mode 0644
-      source "app_unicorn.rb.erb"
-      variables :name => app, :deploy_user => deploy_user, :number_of_workers => app_info['number_of_workers'] || 2
-    end
-
-    template "#{node[:bluepill][:conf_dir]}/#{app}.pill" do
-      mode 0644
-      source "bluepill_unicorn.rb.erb"
-      variables :name => app, :deploy_user => deploy_user, :app_env => app_env, :rails_env => rails_env
-    end
-
-    bluepill_service app do
-      action [:enable, :load, :start]
-    end
-
-    template "/etc/init/#{app}.conf" do
-      mode 0644
-      source "bluepill_upstart.erb"
-      variables :name => app
-    end
-
-    service "#{app}" do
-      provider Chef::Provider::Service::Upstart
-      action [ :enable ]
     end
 
     nginx_site "#{app}.conf" do

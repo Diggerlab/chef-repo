@@ -18,7 +18,7 @@ on a single server or multiple servers:
 * Unicorn for running Ruby on Rails
 * Zero-downtime deploys
 * Multiple apps on one server
-* Database creation
+* Database creation and password generation
 * Easy SSL configuration
 * Deployment with Capistrano
 
@@ -40,7 +40,7 @@ Clone the repository onto your own workstation.
 git clone git://github.com/intercity/chef-repo.git chef_repo
 ```
 
-Run bundle to install chef and knife-solo:
+Run bundle:
 
 ```sh
 bundle install
@@ -48,13 +48,13 @@ bundle install
 
 ### Setting up the server
 
-Prepare the server with `knife solo`. This installs Chef.
+Prepare the server with `knife solo`. This installs Chef on the server.
 
 ```sh
 bundle exec knife solo prepare <your user>@<your host/ip>
 ```
 
-This will create `nodes/<your host/ip>.json`. Copy the contents from `nodes/sample_host.json` into
+This will create `nodes/<your server>.json`. Copy the contents from `nodes/sample_host.json` into
 your host json file.
 
 In the file, replace the samples between `< >` with the values for your server and applications.
@@ -67,18 +67,18 @@ bundle exec knife solo cook <your user>@<your host/ip>
 
 ### Deploying your applications
 
-Applications are deployed using capistrano. You can find a sample application to be deployed using these recipes here: [https://github.com/intercity/intercity_sample_app](https://github.com/intercity/intercity_sample_app). 
+Applications are deployed using capistrano. You can find a sample application to be deployed using these recipes here: [https://github.com/intercity/intercity_sample_app](https://github.com/intercity/intercity_sample_app).
 
 In short you need to do the following:
 
 - Ensure you have a rbenv .ruby-version in your application, specifying the version to use.
-- Add `intercity` gem to your gemfile.
-- Generate the `unicorn` binstub so that bluepill can start your application.
+- Add Capistrano and Unicorn to your Gemfile.
+- Generate the `unicorn` binstub so your server can start your application.
 
 So let's get started.
 
 The two commands in the previous section prepare your apps to be deployed with
-Capistrano. 
+Capistrano.
 
 The folder structure for each app on your server looks like:
 
@@ -95,49 +95,45 @@ The folder structure for each app on your server looks like:
     sockets/
 ```
 
-Ensure that you are having a `.ruby-version` in your application, if you have not you
+Ensure that you have a `.ruby-version` in your application. If you do not have it you
 can set it using rbenv like this:
 
 ```ruby
 rbenv local <YOUR-RUBY-VERSION>
 ```
 
-Add the `intercity` gem to your `Gemfile`:
+Add the Unicorn and Capistrano gems to your Gemfile:
 
 ```ruby
-# other gems..
+# your other gems..
 
-gem 'intercity'
+gem 'unicorn'
+gem 'capistrano', '~> 2.15.5'
 ```
 
-Run, bundle to install your gems
+Run, bundle to install the new gems.
 
 ```ruby
 bundle
 ```
 
-Generate the `unicorn` binstub so we can start unicorn:
+Generate the `unicorn` binstub so you can start Unicorn on your server and commit it.
 
 ```ruby
-bundle binstubs unicorn
+bundle binstub unicorn
+git commit -am 'Added Unicorn'
+git push
 ```
 
-This will create a `bin/unicorn` binstub that you need to check in into your repository:
-
-Then generate the capistrano deployment files by using this command:
-
+Then generate configuration files for Capistrano.
 
 ```sh
 bundle exec capify .
 ```
 
-Uncomment the
+This command will generate `Capfile` and `config/deploy.rb`
 
-```ruby
-load 'deploy/assets'
-```
-
-line in the generated `Capfile` so it looks like this:
+Open `Capfile` and change it to:
 
 ```ruby
 load 'deploy'
@@ -145,22 +141,75 @@ load 'deploy/assets'
 load 'config/deploy'
 ```
 
-(You can view it here in our sample repo: [Capfile](https://github.com/intercity/intercity_sample_app/blob/master/Capfile))
+Open `config/deploy.rb` and change it to look like the sample below, and change te settings for your application, repository and server:
 
-Open `config/deploy.rb` and set the `application` and `repository` settings. (Check it here in the sample repo [deploy.rb](https://github.com/intercity/intercity_sample_app/blob/master/config/deploy.rb) )
-Run
+```ruby
+require 'bundler/capistrano'
+
+default_run_options[:pty] = true
+set :default_environment, {
+  "PATH" => "/opt/rbenv/shims:/opt/rbenv/bin:$PATH"
+}
+set :ssh_options, { :forward_agent => true }
+
+set :application, "intercity_sample_app"
+set :repository, "git@github.com:intercity/intercity_sample_app.git"
+set :user, "deploy"
+set :use_sudo, false
+
+server "<your server>", :web, :app, :db, :primary => true
+
+after "deploy:finalize_update", "symlink:all"
+
+namespace :symlink do
+  task :db do
+    run "ln -nfs #{shared_path}/config/database.yml #{release_path}/config/database.yml"
+  end
+  task :all do
+    symlink.db
+  end
+end
+
+namespace :deploy do
+
+  task :start do
+    run "#{current_path}/bin/unicorn -Dc #{shared_path}/config/unicorn.rb -E #{rails_env} #{current_path}/config.ru"
+  end
+
+  task :restart do
+    run "kill -USR2 $(cat #{shared_path}/pids/unicorn.pid)"
+  end
+
+end
+
+after "deploy:restart", "deploy:cleanup"
+```
+
+Run this command to check if everything is set up correctly on your server and in your Capistrano configuration:
 
 ```sh
 bundle exec cap deploy:check
 ```
 
-to see if everything is set up. And then
+Then run this command for your first deploy:
+
+```sh
+bundle exec cap deploy:cold
+```
+
+This will deploy your app, run your database migrations and start Unicorn. For subsequent deploys, use:
 
 ```sh
 bundle exec cap deploy
 ```
 
-to deploy your application!
+or
+
+```sh
+bundle exec cap deploy:migrations
+```
+
+if you made changes to your database schema.
 
 ## Getting help
 

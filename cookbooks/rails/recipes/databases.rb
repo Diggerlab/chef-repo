@@ -1,6 +1,8 @@
 include_recipe "database"
 
-gem_package "mysql"
+gem_package "mysql" do
+  gem_binary "/opt/chef/embedded/bin/gem"
+end
 
 if node[:active_applications]
 
@@ -8,20 +10,19 @@ if node[:active_applications]
     if app_info['database_info']
 
       database_info = app_info['database_info']
+      database_name = app_info['database_info']['database']
 
-      mysql_connection_info = {:host => database_info['host'], :username => "root", :password => node['mysql']['server_root_password']}
+      mysql_connection_info = {:host => "localhost", :username => "root", :password => node['mysql']['server_root_password']}
 
-      app = database_info['database']
-      
       mysql_database app do
         connection(mysql_connection_info)
       end
 
-      mysql_database_user app do
+      mysql_database_user database_name do
         connection(mysql_connection_info)
         username database_info['username']
         password database_info['password']
-        database_name database_info['database']
+        database_name app
         table "*"
         host '%'
         action :grant
@@ -34,16 +35,11 @@ if node[:active_applications]
             connection(mysql_connection_info)
             username database_info['username']
             password database_info['password']
-            database_name database_info['database']
+            database_name app
             table "*"
-            host '%'
+            host client_address
             action :grant
           end
         end
-
-      end
-
-    end
-  end
 
 end
