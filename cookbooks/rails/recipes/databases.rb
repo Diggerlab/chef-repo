@@ -41,5 +41,8 @@ if node[:active_applications]
             action :grant
           end
         end
+      end
+    end
+  end
 
 end
